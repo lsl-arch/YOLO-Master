@@ -4,9 +4,14 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
 from edge_utils import add_profile_args
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 
 def parse_args() -> argparse.Namespace:
@@ -17,7 +22,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--opset", type=int, default=12)
     parser.add_argument("--half", action="store_true")
     parser.add_argument("--int8", action="store_true")
-    parser.add_argument("--simplify", action="store_true", help="Simplify ONNX where supported")
+    simplify = parser.add_mutually_exclusive_group()
+    simplify.add_argument("--simplify", dest="simplify", action="store_true", help="Simplify ONNX with onnxsim (default)")
+    simplify.add_argument("--no-simplify", dest="simplify", action="store_false", help="debug-only raw ONNX export")
+    parser.set_defaults(simplify=True)
     add_profile_args(parser)
     return parser.parse_args()
 

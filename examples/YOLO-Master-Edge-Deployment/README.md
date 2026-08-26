@@ -11,14 +11,22 @@ It provides a lightweight, reproducible scaffold for exporting YOLO-Master model
 - `validate_edge_outputs.py` - compare PyTorch/exported backend outputs saved as `.npy` tensors.
 - `cpp/edge_benchmark.cpp` - C++ benchmark runner with backend selection, OpenCV letterbox preprocessing, CSV latency output, and summary stats.
 - `cpp/backends/` - backend interface plus ONNX, NCNN, and MNN implementation slots.
-- `CMakeLists.txt` - portable CMake target for the C++ benchmark entry.
+- `cpp/edge_benchmark_stub.cpp` - optional dependency-light CLI reference; it is not part of the default CMake target.
+- `CMakeLists.txt` - CMake target for the full C++ benchmark runner.
+
+The production ONNX Runtime + NCNN implementation for Issue #51 is also
+available in [`../YOLO-Master-EsMoE-N-ONNX-NCNN-MNN-CPP/`](../YOLO-Master-EsMoE-N-ONNX-NCNN-MNN-CPP/).
 
 ## Vertical Profiles
 
 The example includes two profiles:
 
-- `visdrone`: keeps long/short aspect ratio, uses lower confidence for small objects.
-- `sku110k`: supports high-resolution shelf images and a slightly higher NMS IoU.
+- `visdrone`: keeps the long/short aspect ratio and defaults to `conf=0.001`, `iou=0.70` for dense small-object validation.
+- `sku110k`: supports high-resolution shelf images and defaults to `conf=0.25`, `iou=0.60`.
+
+The Python profile defaults follow the Issue #51 validation recipe. The C++
+benchmark accepts explicit `--conf` and `--iou` values so an existing benchmark
+can preserve its historical thresholds when comparing with earlier results.
 
 ## Export
 
@@ -27,7 +35,8 @@ python export_edge_models.py --model runs/train/weights/best.pt --formats onnx n
 python export_edge_models.py --model runs/train/weights/best.pt --formats onnx mnn --imgsz 960
 ```
 
-For ONNX simplification, install export dependencies and pass `--simplify`.
+ONNX simplification is enabled by default; use `--no-simplify` only for a raw
+debug export.
 
 ## Consistency Validation
 
@@ -39,6 +48,12 @@ python validate_edge_outputs.py --reference pytorch.npy --candidate ncnn.npy --t
 ```
 
 The tool reports max absolute error, mean absolute error, RMSE, and whether the configured tolerance is met.
+`edge_utils.read_latency_csv` accepts both the scaffold's `latency_ms` column
+and the full runner's end-to-end `total_ms` column.
+
+For the complete Issue #51 acceptance checklist covering the 500-image accuracy
+gate, INT8 calibration, tensor-level debugging, and latency reporting, see
+[`VALIDATION.md`](VALIDATION.md).
 
 ## CMake Benchmark Build
 
@@ -49,7 +64,11 @@ cmake -S . -B build
 cmake --build build
 ```
 
-Without a backend flag, ONNX/NCNN/MNN compile in stub mode so the benchmark CLI and CSV plumbing remain buildable without SDKs installed.
+Without a backend SDK option, the ONNX/NCNN/MNN implementation slots compile in
+stub mode so the benchmark CLI and CSV plumbing remain buildable without SDKs.
+The default CMake target is still `cpp/edge_benchmark.cpp` plus its backend
+sources; enable `WITH_ONNXRUNTIME`, `WITH_NCNN`, or `WITH_MNN` for real model
+execution. The standalone `edge_benchmark_stub.cpp` is not linked by default.
 
 ### ONNX Runtime
 
@@ -173,6 +192,10 @@ The aggregate latency summary is printed to stdout, not written to the CSV:
 ```text
 count,mean_ms,p50_ms,p95_ms,p99_ms,fps
 ```
+
+The production runner additionally writes a `#summary` row; the shared Python
+reader accepts both formats and ignores that aggregate row when reading per-image
+latencies.
 
 ## Recommended Issue #51 Workflow
 
